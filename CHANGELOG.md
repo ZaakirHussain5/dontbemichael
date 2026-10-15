@@ -8,6 +8,10 @@ Don't Be Michael keeps its own version line, starting at 0.0.1.
 
 ## [Unreleased]
 
+### Changed
+
+- A team member's profile follows the work style you saved. "What they do" and "Asks you first" come from that work style. The Office Pack's lists show only when no work style is saved yet. Michael's profile is unchanged.
+
 ## [0.2.0] (2026-10-13)
 
 ### Added

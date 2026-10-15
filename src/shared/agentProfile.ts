@@ -72,3 +72,74 @@ export function parseRoleLine(description: string | undefined): RoleLine {
 export function workStyleBody(goal: string | undefined): string {
   return (goal ?? '').replace(/^The owner set this work style for your role[^\n]*\n+/, '').trim();
 }
+
+/** What the Profile lists for a team member who has a saved work style.
+ *  `found` is false when the text has neither section, so the caller can keep
+ *  the Office Pack lists. An empty section still counts as found: the owner
+ *  left it out, and the pack's old line must not fill it back in. */
+export interface ProfileDuties {
+  found: boolean;
+  /** "How the work is done", one line or sentence each. */
+  does: string[];
+  /** "Asks the owner first", one line or sentence each. */
+  asksFirst: string[];
+}
+
+/** A heading the work style uses for those two parts, in either form the app
+ *  stores: the plain labels the owner edits, or the house headings the agent
+ *  is given. "The job" only ends the previous part. */
+function dutyHeading(line: string): { section: 'does' | 'asks' | 'skip'; rest: string } | null {
+  const text = line.trim().replace(/^#{1,6}\s+/, '');
+  // A colon, or nothing else on the line. A sentence that merely starts
+  // with the words ("How to work the dough takes practice.") is not a heading.
+  const rules: Array<{ section: 'does' | 'asks' | 'skip'; re: RegExp }> = [
+    { section: 'does', re: /^(?:how the work is done|how to work|what you do)\s*(?::\s*(.*)|\s*)$/i },
+    { section: 'asks', re: /^(?:asks (?:you|the owner) first|needs the owner'?s approval(?:\s*\([^)]*\))?)\s*(?::\s*(.*)|\s*)$/i },
+    { section: 'skip', re: /^the job\s*(?::\s*(.*)|\s*)$/i }
+  ];
+  for (const rule of rules) {
+    const hit = rule.re.exec(text);
+    if (hit) return { section: rule.section, rest: (hit[1] ?? '').trim() };
+  }
+  return null;
+}
+
+function dutyItems(lines: string[]): string[] {
+  const items: string[] = [];
+  for (const line of lines) {
+    const text = line.replace(/^[•*\-]\s+/, '').trim();
+    if (!text) continue;
+    for (const sentence of sentences(text)) items.push(sentence);
+  }
+  return items;
+}
+
+/** The two lists an owner scans, read from the saved work style rather than
+ *  the Office Pack card. Michael is not passed here: his lists are written
+ *  for him in the app. */
+export function profileDuties(goal: string | undefined): ProfileDuties {
+  const does: string[] = [];
+  const asksFirst: string[] = [];
+  let section: 'does' | 'asks' | 'skip' | null = null;
+  let found = false;
+  const bucket: string[] = [];
+  const flush = (): void => {
+    const items = dutyItems(bucket);
+    bucket.length = 0;
+    if (section === 'does') does.push(...items);
+    else if (section === 'asks') asksFirst.push(...items);
+  };
+  for (const raw of workStyleBody(goal).split('\n')) {
+    const heading = dutyHeading(raw);
+    if (heading) {
+      flush();
+      if (heading.section === 'does' || heading.section === 'asks') found = true;
+      section = heading.section;
+      if (heading.rest) bucket.push(heading.rest);
+      continue;
+    }
+    if (section === 'does' || section === 'asks') bucket.push(raw);
+  }
+  flush();
+  return { found, does, asksFirst };
+}
