@@ -149,13 +149,13 @@ export function ProfileTab({ agent }: { agent: Agent }) {
             parseRoleLine still takes the routing sentences out of the summary. */}
         {does.length > 0 && (
           <Section title={t('profile.does', { name })}>
-            <List items={does} mark="✓" markColor="var(--cth-mint)" />
+            <List items={does} mark="✓" markColor="var(--cth-mint)" rows={!!duties?.found} />
           </Section>
         )}
 
         {asksFirst.length > 0 && (
           <Section title={t('profile.asksFirst')}>
-            <List items={asksFirst} mark="?" markColor="var(--cth-peach)" />
+            <List items={asksFirst} mark="?" markColor="var(--cth-peach)" rows={!!duties?.found} />
           </Section>
         )}
 
@@ -262,17 +262,23 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function List({ items, mark, markColor }: { items: string[]; mark: string; markColor: string }) {
+function List({ items, mark, markColor, rows }: { items: string[]; mark: string; markColor: string; rows?: boolean }) {
   const rtl = useRtl();
+  // Row chrome only for duties read from a saved work style. Michael's lists
+  // and the Office Pack template stay a plain list. The tokens are in tokens.css.
+  const row = rows ? {
+    alignItems: 'flex-start' as const,
+    margin: 0,
+    padding: '8px 10px',
+    borderRadius: 'var(--cth-r-md)',
+    background: 'var(--cth-paper-100)',
+    boxShadow: 'inset 0 0 0 1px var(--cth-line-2)'
+  } : { alignItems: 'baseline' as const };
   return (
     <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
       {items.map((it, i) => (
         <li key={`${i}:${it}`} style={{
-          display: 'flex', gap: 8, alignItems: 'flex-start',
-          margin: 0, padding: '8px 10px',
-          borderRadius: 'var(--cth-r-md)',
-          background: 'var(--cth-paper-100)',
-          boxShadow: 'inset 0 0 0 1px var(--cth-line-2)',
+          display: 'flex', gap: 8, ...row,
           fontSize: 14, lineHeight: '20px', color: 'var(--cth-ink-900)'
         }}>
           <span aria-hidden style={{ width: 12, flexShrink: 0, textAlign: 'center', fontWeight: 700, color: markColor }}>{mark}</span>

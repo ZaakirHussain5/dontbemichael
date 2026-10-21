@@ -116,6 +116,53 @@ test('the work style the owner edits is a list of lines and writes back the same
   assert.equal(formatWorkStyleDraft({ job: '', does: ['  '], asksFirst: [] }), '');
 });
 
+test('loading and saving Pam\'s pack work style keeps every line', () => {
+  const pack = JSON.parse(read('resources/packs/restaurant-food.json'));
+  const pam = pack.agents.find((a) => a.id === 'pam').workStyle;
+  const saved = formatWorkStyleDraft(parseWorkStyleDraft(pam));
+  for (const line of workStyleBody(pam).split('\n')) {
+    const text = line.trim();
+    if (!text || /^#{1,6}\s/.test(text)) continue;
+    assert.ok(saved.split('\n').includes(text), text.slice(0, 90));
+  }
+  assert.equal(formatWorkStyleDraft(parseWorkStyleDraft(saved)), saved);
+});
+
+test('a paragraph of older duties splits into sentences, and a written line does not', () => {
+  const old = profileDuties('How the work is done: Checks the bookings each morning, so the day is clear. Confirms the headcount, so the kitchen can plan.');
+  assert.deepEqual(old.does, [
+    'Checks the bookings each morning, so the day is clear.',
+    'Confirms the headcount, so the kitchen can plan.'
+  ]);
+  const listed = parseWorkStyleDraft([
+    'How the work is done:',
+    'Work oldest first. Then file it.',
+    'Route mail to Finance.'
+  ].join('\n'));
+  assert.deepEqual(listed.does, ['Work oldest first. Then file it.', 'Route mail to Finance.']);
+});
+
+test('a job keeps its paragraphs, and an unknown heading or markdown line is kept', () => {
+  const text = [
+    'The job:',
+    'First paragraph stays.',
+    '',
+    'Second paragraph stays.',
+    '',
+    'How the work is done:',
+    '**Route** mail to Finance.',
+    '### Office notes',
+    'The binder is in the safe.'
+  ].join('\n');
+  const draft = parseWorkStyleDraft(text);
+  assert.equal(draft.job, 'First paragraph stays.\n\nSecond paragraph stays.');
+  assert.deepEqual(draft.does, ['**Route** mail to Finance.', '### Office notes', 'The binder is in the safe.']);
+  const again = parseWorkStyleDraft(formatWorkStyleDraft(draft));
+  assert.equal(again.job, draft.job);
+  assert.deepEqual(again.does, draft.does);
+  assert.deepEqual(again.asksFirst, draft.asksFirst);
+});
+
 test('leaving out an approval section does not fall back to the pack', () => {
   const duties = profileDuties('How the work is done: Checks the bookings each morning.');
   assert.equal(duties.found, true);
@@ -138,6 +185,7 @@ test('a saved work style replaces the pack lists, and Michael keeps his own', ()
   assert.match(src, /const duties = god \? undefined : profileDuties\(effectiveWorkStyle\(agent\)\)/);
   assert.match(src, /duties\?\.found \? duties\.does : \(card\?\.does \?\? \[\]\)/);
   assert.match(src, /duties\?\.found \? duties\.asksFirst : \(card\?\.wontDo \?\? \[\]\)/);
+  assert.match(src, /rows=\{!!duties\?\.found\}/, 'the row styling is only the saved work style');
   assert.match(src, /god\s*\?\s*\(t\('profile\.god\.does'/);
   assert.match(src, /god\s*\?\s*\(t\('profile\.god\.asksFirst'/);
 });

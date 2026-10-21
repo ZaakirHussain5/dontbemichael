@@ -59,8 +59,12 @@ Michael edits through the same dialog.
   fills the height that is left (at least 320).
 - **D5, the work style is a list.** The job is one note. How the work is done,
   and what asks the owner first, are one line each, with a way to add or
-  remove a line. Saving still writes the plain labels the rewrite already
-  reads. The profile shows those same lines as rows.
+  remove a line. A line already written stays whole, including a job of more
+  than one paragraph, an unknown heading, and markdown. Only an older work
+  style that writes its duties as one paragraph is split into sentences.
+  Saving still writes the plain labels the rewrite already reads. The profile
+  shows those same lines as rows, and only those: Michael and the Office Pack
+  template keep a plain list.
 
 Kept as is: Name stays editable (a rename, with its existing error line); the
 Work style required check for team members; the plain words rewrite on save;

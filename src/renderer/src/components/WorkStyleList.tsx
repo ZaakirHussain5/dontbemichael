@@ -1,7 +1,6 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatWorkStyleDraft, parseWorkStyleDraft, type WorkStyleDraft } from '@shared/agentProfile';
-import { useRtl } from '@/i18n/useDirection';
 import { Icon } from './Icon';
 import { PixelButton } from './PixelButton';
 
@@ -10,24 +9,37 @@ import { PixelButton } from './PixelButton';
  * or approval is its own line. Saving still hands the plain labels to the
  * rewrite, so the agent receives the same instructions as before.
  */
+let lineSeq = 0;
+const nextLineId = (): string => `ws-${++lineSeq}`;
+const lineIds = (n: number): string[] => Array.from({ length: n }, () => nextLineId());
+
 export function WorkStyleList({ value, onChange, invalid }: {
   value: string;
   onChange: (next: string) => void;
   invalid?: boolean;
 }) {
   const { t } = useTranslation();
-  const rtl = useRtl();
-  const [draft, setDraft] = useState(() => parseWorkStyleDraft(value));
+  const initial = parseWorkStyleDraft(value);
+  const [draft, setDraft] = useState(initial);
+  const [lineKeys, setLineKeys] = useState(() => ({ does: lineIds(initial.does.length), asks: lineIds(initial.asksFirst.length) }));
+  // The last text this list handed the parent. A rewrite from outside (the
+  // quick plain text, then the model's) is the only value that replaces the list.
+  const emitted = useRef(formatWorkStyleDraft(initial));
 
-  // A rewrite arriving from outside replaces the list. Typing does not: the
-  // parent stores the formatted text, which parses back to these same lines.
   useEffect(() => {
-    setDraft((cur) => (formatWorkStyleDraft(cur) === value ? cur : parseWorkStyleDraft(value)));
+    if (value === emitted.current) return;
+    const next = parseWorkStyleDraft(value);
+    emitted.current = formatWorkStyleDraft(next);
+    setDraft(next);
+    setLineKeys({ does: lineIds(next.does.length), asks: lineIds(next.asksFirst.length) });
   }, [value]);
 
-  const edit = (next: WorkStyleDraft): void => {
+  const edit = (next: WorkStyleDraft, keys?: Partial<{ does: string[]; asks: string[] }>): void => {
     setDraft(next);
-    onChange(formatWorkStyleDraft(next));
+    if (keys) setLineKeys((cur) => ({ ...cur, ...keys }));
+    const formatted = formatWorkStyleDraft(next);
+    emitted.current = formatted;
+    onChange(formatted);
   };
 
   return (
@@ -38,11 +50,12 @@ export function WorkStyleList({ value, onChange, invalid }: {
     }}>
       <Part label={t('editAgent.jobLabel')}>
         <textarea
-          dir={rtl ? 'auto' : undefined}
+          dir="auto"
           value={draft.job}
           rows={3}
           placeholder={t('editAgent.jobPlaceholder')}
           aria-label={t('editAgent.jobLabel')}
+          aria-invalid={invalid ? true : undefined}
           className="cth-input"
           onChange={(e) => edit({ ...draft, job: e.target.value })}
           style={fieldStyle}
@@ -51,52 +64,53 @@ export function WorkStyleList({ value, onChange, invalid }: {
       <DutyList
         label={t('editAgent.doesLabel')}
         placeholder={t('editAgent.linePlaceholder')}
-        addLabel={t('editAgent.addLine')}
-        removeLabel={t('editAgent.removeLine')}
+        keys={lineKeys.does}
         items={draft.does}
-        onChange={(does) => edit({ ...draft, does })}
+        invalid={invalid}
+        onChange={(does, doesKeys) => edit({ ...draft, does }, { does: doesKeys })}
       />
       <DutyList
         label={t('editAgent.asksLabel')}
         placeholder={t('editAgent.askPlaceholder')}
-        addLabel={t('editAgent.addLine')}
-        removeLabel={t('editAgent.removeLine')}
+        keys={lineKeys.asks}
         items={draft.asksFirst}
-        onChange={(asksFirst) => edit({ ...draft, asksFirst })}
+        invalid={invalid}
+        onChange={(asksFirst, asksKeys) => edit({ ...draft, asksFirst }, { asks: asksKeys })}
       />
     </div>
   );
 }
 
-function DutyList({ label, placeholder, addLabel, removeLabel, items, onChange }: {
+function DutyList({ label, placeholder, keys, items, invalid, onChange }: {
   label: string;
   placeholder: string;
-  addLabel: string;
-  removeLabel: string;
+  keys: string[];
   items: string[];
-  onChange: (items: string[]) => void;
+  invalid?: boolean;
+  onChange: (items: string[], keys: string[]) => void;
 }) {
-  const rtl = useRtl();
-  const setAt = (i: number, text: string) => onChange(items.map((line, j) => (j === i ? text : line)));
+  const { t } = useTranslation();
+  const setAt = (i: number, text: string) => onChange(items.map((line, j) => (j === i ? text : line)), keys);
   return (
     <Part label={label}>
       {items.length > 0 && (
         <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
           {items.map((line, i) => (
-            <li key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <li key={keys[i]} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
               <input
-                dir={rtl ? 'auto' : undefined}
+                dir="auto"
                 value={line}
                 placeholder={placeholder}
-                aria-label={label}
+                aria-label={t('editAgent.lineLabel', { label, n: i + 1 })}
+                aria-invalid={invalid ? true : undefined}
                 className="cth-input"
                 onChange={(e) => setAt(i, e.target.value)}
                 style={{ ...fieldStyle, flex: 1, minHeight: 34 }}
               />
               <button
                 type="button"
-                aria-label={removeLabel}
-                onClick={() => onChange(items.filter((_, j) => j !== i))}
+                aria-label={t('editAgent.removeLine', { label, n: i + 1 })}
+                onClick={() => onChange(items.filter((_, j) => j !== i), keys.filter((_, j) => j !== i))}
                 style={removeStyle}
               >
                 <Icon name="x" />
@@ -105,9 +119,9 @@ function DutyList({ label, placeholder, addLabel, removeLabel, items, onChange }
           ))}
         </ul>
       )}
-      <PixelButton variant="ghost" size="sm" onClick={() => onChange([...items, ''])} style={{ alignSelf: 'flex-start' }}>
+      <PixelButton variant="ghost" size="sm" onClick={() => onChange([...items, ''], [...keys, nextLineId()])} style={{ alignSelf: 'flex-start' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <Icon name="plus" />{addLabel}
+          <Icon name="plus" />{t('editAgent.addLine')}
         </span>
       </PixelButton>
     </Part>

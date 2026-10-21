@@ -79,9 +79,9 @@ export function workStyleBody(goal: string | undefined): string {
  *  left it out, and the pack's old line must not fill it back in. */
 export interface ProfileDuties {
   found: boolean;
-  /** "How the work is done", one line or sentence each. */
+  /** "How the work is done", one line each. A paragraph of older duties is one sentence each. */
   does: string[];
-  /** "Asks the owner first", one line or sentence each. */
+  /** "Asks the owner first", one line each. A paragraph of older duties is one sentence each. */
   asksFirst: string[];
 }
 
@@ -114,36 +114,71 @@ function dutyHeading(line: string): { section: 'job' | 'does' | 'asks'; rest: st
   return null;
 }
 
-function dutyItems(lines: string[]): string[] {
-  const items: string[] = [];
-  for (const line of lines) {
-    const text = line.replace(/^[•*\-]\s+/, '').trim();
-    if (!text) continue;
-    for (const sentence of sentences(text)) items.push(sentence);
-  }
-  return items;
+function blankEdges(lines: string[]): string[] {
+  let start = 0;
+  let end = lines.length;
+  while (start < end && !lines[start].trim()) start++;
+  while (end > start && !lines[end - 1].trim()) end--;
+  return lines.slice(start, end);
 }
 
-/** Split a work style into the job note and the two lists. Text with neither
- *  list heading stays one job note, so nothing is dropped on the way into
- *  the editor. */
+function bulletLine(line: string): boolean {
+  return /^[•*\-]\s+/.test(line.trim());
+}
+
+function stripBullet(line: string): string {
+  return line.trim().replace(/^[•*\-]\s+/, '').trim();
+}
+
+/** One duty per line: a bullet, or several lines with nothing blank between them.
+ *  A single paragraph, or paragraphs split by a blank line, is the older shape. */
+function isDutyList(lines: string[]): boolean {
+  const body = blankEdges(lines);
+  const items = body.map((line) => line.trim()).filter(Boolean);
+  if (items.some(bulletLine)) return true;
+  return items.length >= 2 && body.every((line) => line.trim());
+}
+
+/** Keep each written line. Split into sentences only for a paragraph of duties,
+ *  and only when this work style has no section that is already a list of lines. */
+function dutyLines(lines: string[], keepLines: boolean): string[] {
+  const body = blankEdges(lines);
+  const items = body.map((line) => line.trim()).filter(Boolean);
+  if (!items.length) return [];
+  if (keepLines || isDutyList(body)) return items.map(stripBullet).filter(Boolean);
+  const paras: string[] = [];
+  let cur: string[] = [];
+  const flush = (): void => {
+    const text = cur.join(' ').trim();
+    if (text) paras.push(text);
+    cur = [];
+  };
+  for (const line of body) {
+    if (!line.trim()) flush();
+    else cur.push(stripBullet(line));
+  }
+  flush();
+  return paras.flatMap((para) => sentences(para));
+}
+
+function jobText(lines: string[]): string {
+  return blankEdges(lines).join('\n').trim();
+}
+
+/** Split a work style into the job note and the two lists. A job keeps its
+ *  paragraphs. A line already written stays whole, including an unknown
+ *  heading or markdown. Text with neither list heading stays one job note. */
 export function parseWorkStyleDraft(goal: string | undefined): WorkStyleDraft {
-  const jobLines: string[] = [];
-  const does: string[] = [];
-  const asksFirst: string[] = [];
-  let section: 'job' | 'does' | 'asks' | null = null;
+  const body = workStyleBody(goal).replace(/\r/g, '');
+  const chunks: Array<{ section: 'job' | 'does' | 'asks'; lines: string[] }> = [];
+  let section: 'job' | 'does' | 'asks' = 'job';
+  let lines: string[] = [];
   let listed = false;
   let sawHeading = false;
-  const bucket: string[] = [];
   const flush = (): void => {
-    if (section === 'job') {
-      const text = bucket.map((line) => line.trim()).filter(Boolean).join(' ');
-      if (text) jobLines.push(text);
-    } else if (section === 'does') does.push(...dutyItems(bucket));
-    else if (section === 'asks') asksFirst.push(...dutyItems(bucket));
-    bucket.length = 0;
+    chunks.push({ section, lines });
+    lines = [];
   };
-  const body = workStyleBody(goal);
   for (const raw of body.split('\n')) {
     const heading = dutyHeading(raw);
     if (heading) {
@@ -151,19 +186,26 @@ export function parseWorkStyleDraft(goal: string | undefined): WorkStyleDraft {
       sawHeading = true;
       if (heading.section === 'does' || heading.section === 'asks') listed = true;
       section = heading.section;
-      if (heading.rest) bucket.push(heading.rest);
+      lines = heading.rest ? [heading.rest] : [];
       continue;
     }
-    if (section) bucket.push(raw);
-    else if (raw.trim()) jobLines.push(raw.trim());
+    lines.push(raw);
   }
   flush();
-  return {
-    job: sawHeading ? jobLines.join(' ') : body.trim(),
-    does,
-    asksFirst,
-    listed
-  };
+  if (!sawHeading) return { job: body.trim(), does: [], asksFirst: [], listed: false };
+
+  const keepLines = chunks.some((c) => (c.section === 'does' || c.section === 'asks') && isDutyList(c.lines));
+  const jobs: string[] = [];
+  const does: string[] = [];
+  const asksFirst: string[] = [];
+  for (const chunk of chunks) {
+    if (chunk.section === 'job') {
+      const text = jobText(chunk.lines);
+      if (text) jobs.push(text);
+    } else if (chunk.section === 'does') does.push(...dutyLines(chunk.lines, keepLines));
+    else asksFirst.push(...dutyLines(chunk.lines, keepLines));
+  }
+  return { job: jobs.join('\n\n'), does, asksFirst, listed };
 }
 
 /** The plain labels the owner edits, and the form the rewrite reads back. */

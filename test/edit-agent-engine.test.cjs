@@ -63,7 +63,17 @@ test('the engine is one folded line, closed by default, naming the provider and 
   assert.match(src, /\{engineOpen && \(\s*<Fields id="engine">/);
   assert.match(src, /\{modelLabel \? `\$\{providerLabel\}, \$\{modelLabel\}` : providerLabel\}/);
   assert.match(src, /<WorkStyleList/, 'the work style is a list of lines, not one text box');
-  assert.match(fs.readFileSync(path.resolve(__dirname, '../src/renderer/src/components/WorkStyleList.tsx'), 'utf8'), /minHeight: 320/, 'the work style list takes the room left');
+  const list = fs.readFileSync(path.resolve(__dirname, '../src/renderer/src/components/WorkStyleList.tsx'), 'utf8');
+  assert.match(list, /minHeight: 320/, 'the work style list takes the room left');
+  assert.match(list, /dir="auto"/, 'mixed scripts still set their own direction');
+  assert.match(list, /aria-invalid=\{invalid \? true : undefined\}/);
+  assert.match(list, /aria-label=\{t\('editAgent\.lineLabel', \{ label, n: i \+ 1 \}\)\}/);
+  assert.match(list, /aria-label=\{t\('editAgent\.removeLine', \{ label, n: i \+ 1 \}\)\}/);
+  assert.match(list, /key=\{keys\[i\]\}/);
+  assert.doesNotMatch(list, /key=\{i\}/);
+  assert.match(src, /setGoal\(\(cur\) => \(cur === quick \? res\.text : cur\)\)/, 'the model rewrite still fills the list');
+  assert.match(list, /value === emitted\.current\) return/, 'an outside rewrite replaces the lines');
+  assert.doesNotMatch(list, /editAgent\.workStylePlaceholder/);
 });
 
 test('Edit agent takes the window\'s full height, and the work style box fills what is left (owner, 2026-10-02)', () => {
