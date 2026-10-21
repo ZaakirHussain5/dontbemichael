@@ -85,17 +85,27 @@ export interface ProfileDuties {
   asksFirst: string[];
 }
 
-/** A heading the work style uses for those two parts, in either form the app
- *  stores: the plain labels the owner edits, or the house headings the agent
- *  is given. "The job" only ends the previous part. */
-function dutyHeading(line: string): { section: 'does' | 'asks' | 'skip'; rest: string } | null {
+/** The work style as the owner edits it: one note for the job, then a line
+ *  each for how the work is done and what asks the owner first. */
+export interface WorkStyleDraft {
+  job: string;
+  does: string[];
+  asksFirst: string[];
+  /** True when a how-to-work or asks-first heading was in the text, even if
+   *  that part was left empty. */
+  listed: boolean;
+}
+
+/** A heading the work style uses, in either form the app stores: the plain
+ *  labels the owner edits, or the house headings the agent is given. */
+function dutyHeading(line: string): { section: 'job' | 'does' | 'asks'; rest: string } | null {
   const text = line.trim().replace(/^#{1,6}\s+/, '');
   // A colon, or nothing else on the line. A sentence that merely starts
   // with the words ("How to work the dough takes practice.") is not a heading.
-  const rules: Array<{ section: 'does' | 'asks' | 'skip'; re: RegExp }> = [
+  const rules: Array<{ section: 'job' | 'does' | 'asks'; re: RegExp }> = [
     { section: 'does', re: /^(?:how the work is done|how to work|what you do)\s*(?::\s*(.*)|\s*)$/i },
     { section: 'asks', re: /^(?:asks (?:you|the owner) first|needs the owner'?s approval(?:\s*\([^)]*\))?)\s*(?::\s*(.*)|\s*)$/i },
-    { section: 'skip', re: /^the job\s*(?::\s*(.*)|\s*)$/i }
+    { section: 'job', re: /^the job\s*(?::\s*(.*)|\s*)$/i }
   ];
   for (const rule of rules) {
     const hit = rule.re.exec(text);
@@ -114,32 +124,64 @@ function dutyItems(lines: string[]): string[] {
   return items;
 }
 
-/** The two lists an owner scans, read from the saved work style rather than
- *  the Office Pack card. Michael is not passed here: his lists are written
- *  for him in the app. */
-export function profileDuties(goal: string | undefined): ProfileDuties {
+/** Split a work style into the job note and the two lists. Text with neither
+ *  list heading stays one job note, so nothing is dropped on the way into
+ *  the editor. */
+export function parseWorkStyleDraft(goal: string | undefined): WorkStyleDraft {
+  const jobLines: string[] = [];
   const does: string[] = [];
   const asksFirst: string[] = [];
-  let section: 'does' | 'asks' | 'skip' | null = null;
-  let found = false;
+  let section: 'job' | 'does' | 'asks' | null = null;
+  let listed = false;
+  let sawHeading = false;
   const bucket: string[] = [];
   const flush = (): void => {
-    const items = dutyItems(bucket);
+    if (section === 'job') {
+      const text = bucket.map((line) => line.trim()).filter(Boolean).join(' ');
+      if (text) jobLines.push(text);
+    } else if (section === 'does') does.push(...dutyItems(bucket));
+    else if (section === 'asks') asksFirst.push(...dutyItems(bucket));
     bucket.length = 0;
-    if (section === 'does') does.push(...items);
-    else if (section === 'asks') asksFirst.push(...items);
   };
-  for (const raw of workStyleBody(goal).split('\n')) {
+  const body = workStyleBody(goal);
+  for (const raw of body.split('\n')) {
     const heading = dutyHeading(raw);
     if (heading) {
       flush();
-      if (heading.section === 'does' || heading.section === 'asks') found = true;
+      sawHeading = true;
+      if (heading.section === 'does' || heading.section === 'asks') listed = true;
       section = heading.section;
       if (heading.rest) bucket.push(heading.rest);
       continue;
     }
-    if (section === 'does' || section === 'asks') bucket.push(raw);
+    if (section) bucket.push(raw);
+    else if (raw.trim()) jobLines.push(raw.trim());
   }
   flush();
-  return { found, does, asksFirst };
+  return {
+    job: sawHeading ? jobLines.join(' ') : body.trim(),
+    does,
+    asksFirst,
+    listed
+  };
+}
+
+/** The plain labels the owner edits, and the form the rewrite reads back. */
+export function formatWorkStyleDraft(draft: Pick<WorkStyleDraft, 'job' | 'does' | 'asksFirst'>): string {
+  const blocks: string[] = [];
+  const job = draft.job.trim();
+  if (job) blocks.push(`The job:\n${job}`);
+  const does = draft.does.map((line) => line.trim()).filter(Boolean);
+  if (does.length) blocks.push(`How the work is done:\n${does.join('\n')}`);
+  const asks = draft.asksFirst.map((line) => line.trim()).filter(Boolean);
+  if (asks.length) blocks.push(`Asks the owner first:\n${asks.join('\n')}`);
+  return blocks.join('\n\n');
+}
+
+/** The two lists an owner scans, read from the saved work style rather than
+ *  the Office Pack card. Michael is not passed here: his lists are written
+ *  for him in the app. */
+export function profileDuties(goal: string | undefined): ProfileDuties {
+  const draft = parseWorkStyleDraft(goal);
+  return { found: draft.listed, does: draft.does, asksFirst: draft.asksFirst };
 }

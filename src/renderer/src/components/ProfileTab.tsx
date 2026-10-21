@@ -267,7 +267,14 @@ function List({ items, mark, markColor }: { items: string[]; mark: string; markC
   return (
     <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
       {items.map((it, i) => (
-        <li key={`${i}:${it}`} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 14, lineHeight: '20px', color: 'var(--cth-ink-900)' }}>
+        <li key={`${i}:${it}`} style={{
+          display: 'flex', gap: 8, alignItems: 'flex-start',
+          margin: 0, padding: '8px 10px',
+          borderRadius: 'var(--cth-r-md)',
+          background: 'var(--cth-paper-100)',
+          boxShadow: 'inset 0 0 0 1px var(--cth-line-2)',
+          fontSize: 14, lineHeight: '20px', color: 'var(--cth-ink-900)'
+        }}>
           <span aria-hidden style={{ width: 12, flexShrink: 0, textAlign: 'center', fontWeight: 700, color: markColor }}>{mark}</span>
           <span dir={rtl ? 'auto' : undefined}>{it}</span>
         </li>

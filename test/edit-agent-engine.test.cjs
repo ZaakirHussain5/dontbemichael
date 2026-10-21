@@ -56,7 +56,8 @@ test('the engine is one folded line, closed by default, naming the provider and 
   assert.match(src, /aria-expanded=\{engineOpen\}\s*aria-controls=\{engineOpen \? 'edit-agent-engine' : undefined\}/, 'never points at a folded, unmounted group');
   assert.match(src, /\{engineOpen && \(\s*<Fields id="engine">/);
   assert.match(src, /\{modelLabel \? `\$\{providerLabel\}, \$\{modelLabel\}` : providerLabel\}/);
-  assert.match(src, /resize: 'none', minHeight: 320, flex: 1 \}\}/, 'the work style box takes the room left');
+  assert.match(src, /<WorkStyleList/, 'the work style is a list of lines, not one text box');
+  assert.match(fs.readFileSync(path.resolve(__dirname, '../src/renderer/src/components/WorkStyleList.tsx'), 'utf8'), /minHeight: 320/, 'the work style list takes the room left');
 });
 
 test('Edit agent takes the window\'s full height, and the work style box fills what is left (owner, 2026-10-02)', () => {

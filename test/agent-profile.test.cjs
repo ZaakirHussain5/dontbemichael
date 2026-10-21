@@ -9,7 +9,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const loadTs = require('./load-ts.cjs');
 
-const { parseRoleLine, profileDuties, workStyleBody } = loadTs('src/shared/agentProfile.ts');
+const { formatWorkStyleDraft, parseRoleLine, parseWorkStyleDraft, profileDuties, workStyleBody } = loadTs('src/shared/agentProfile.ts');
 const read = (p) => fs.readFileSync(path.resolve(__dirname, '..', p), 'utf8');
 
 const PAM = 'Executive Admin: Pam sorts the business inbox: email from clients, prospects, vendors and software services, urgent and due soon messages, newsletters and junk. Send here for "anything important in email", "did the client reply" or inbox cleanup. Not for writing answers to customer questions; that goes to Customer Support.';
@@ -91,6 +91,29 @@ test('a work style with no such sections leaves the pack lists in place', () => 
   // A sentence that only starts with the heading words is not a heading.
   const prose = profileDuties('How to work the dough takes practice.');
   assert.equal(prose.found, false);
+});
+
+test('the work style the owner edits is a list of lines and writes back the same labels', () => {
+  const text = [
+    'The job:',
+    'Keep the inbox clear, so nothing waits overnight.',
+    '',
+    'How the work is done:',
+    'Work oldest first.',
+    'File receipts.',
+    '',
+    'Asks the owner first:',
+    'Delete nothing.'
+  ].join('\n');
+  const draft = parseWorkStyleDraft(text);
+  assert.equal(draft.job, 'Keep the inbox clear, so nothing waits overnight.');
+  assert.deepEqual(draft.does, ['Work oldest first.', 'File receipts.']);
+  assert.deepEqual(draft.asksFirst, ['Delete nothing.']);
+  const again = parseWorkStyleDraft(formatWorkStyleDraft(draft));
+  assert.equal(again.job, draft.job);
+  assert.deepEqual(again.does, draft.does);
+  assert.deepEqual(again.asksFirst, draft.asksFirst);
+  assert.equal(formatWorkStyleDraft({ job: '', does: ['  '], asksFirst: [] }), '');
 });
 
 test('leaving out an approval section does not fall back to the pack', () => {
